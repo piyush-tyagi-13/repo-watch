@@ -4,14 +4,35 @@ Builds the HTML digest and sends it over Gmail SMTP.
 """
 import html
 import os
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+BULLET_PREFIX = re.compile(r"^\s*(?:[-*•]|\d+\.)\s+")
+BOLD = re.compile(r"\*\*(.+?)\*\*")
+
+
+def _inline(text: str) -> str:
+    return BOLD.sub(r"<strong>\1</strong>", html.escape(text))
+
 
 def _render_summary(summary: str) -> str:
-    escaped = html.escape(summary)
-    return escaped.replace("\n", "<br>")
+    """Models answer in markdown; render bullets and bold as real HTML."""
+    bullets = []
+    paragraphs = []
+    for line in summary.splitlines():
+        if not line.strip():
+            continue
+        if BULLET_PREFIX.match(line):
+            bullets.append(_inline(BULLET_PREFIX.sub("", line).strip()))
+        else:
+            paragraphs.append(_inline(line.strip()))
+
+    parts = [f"<p>{p}</p>" for p in paragraphs]
+    if bullets:
+        parts.append("<ul>" + "".join(f"<li>{b}</li>" for b in bullets) + "</ul>")
+    return "".join(parts)
 
 
 def _repo_section(entry: dict) -> str:
@@ -54,7 +75,11 @@ def build_digest_html(entries: list) -> str:
       .status {{ margin-top: 0.4em; color: #334155; }}
       .status.new {{ color: #16a34a; font-weight: 600; }}
       .meta {{ font-size: 0.85rem; color: #64748b; margin-top: 0.2em; }}
-      .summary {{ margin-top: 0.6em; font-size: 0.95rem; line-height: 1.5; color: #1e293b; }}
+      .summary {{ margin-top: 0.6em; font-size: 0.95rem; line-height: 1.55; color: #1e293b; }}
+      .summary p {{ margin: 0 0 0.6em 0; }}
+      .summary ul {{ margin: 0.2em 0 0 0; padding-left: 1.2em; }}
+      .summary li {{ margin-bottom: 0.45em; }}
+      .summary strong {{ color: #0f172a; }}
     </style>
     </head>
     <body>
