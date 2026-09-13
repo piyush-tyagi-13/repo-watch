@@ -49,9 +49,31 @@ append `.md` to the URL - much more stable to diff than rendered HTML.
    - `GROQ_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `OPENROUTER_API_KEY`
      - synthesis providers, tried in that order
 
-## Manual test run
+## Manual run and controlling the baseline
 
-Actions tab -> "Weekly Repo Watch Mailer" -> "Run workflow".
+Actions tab -> "Weekly Repo Watch Mailer" -> "Run workflow". Two inputs decide
+where "since last time" starts:
+
+| `reset_mode` | What happens |
+|---|---|
+| `none` (default) | Normal run. Compares against the recorded state. |
+| `lookback` | Ignores recorded state, reports the last `lookback_days`, then records today as the canonical starting point. |
+| `baseline` | Records today as the starting point and reports nothing. |
+
+Use `lookback` to produce a deliberate first report - "show me the last 30
+days, and start counting from here". Use `baseline` to start clean from today
+with no report.
+
+Note that documentation entries cannot replay a window: a page only exists in
+its current form and there is no archive to diff against, so any reset simply
+re-anchors them to today. Release entries replay properly because GitHub keeps
+the full release history.
+
+The delta itself lives in two places, both committed back after every run:
+`state.json` (last release tag per repo, content hash per page) and
+`snapshots/` (last week's copy of each page). To reset a single source rather
+than all of them, delete its entry from `state.json` - and its file from
+`snapshots/` for a doc page - then commit.
 
 ## How it works
 

@@ -16,6 +16,15 @@ STATE_PATH = "state.json"
 WATCHLIST_PATH = "watchlist.yaml"
 DEFAULT_GROUP = "Other"
 
+# Reset modes, set from the workflow_dispatch inputs, decide where "since
+# last time" starts:
+#   none      - normal weekly run, compare against recorded state
+#   lookback  - ignore recorded state, report the last LOOKBACK_DAYS, then
+#               record today as the canonical starting point
+#   baseline  - record today as the starting point without reporting anything
+RESET_MODE = os.environ.get("RESET_MODE", "none").strip().lower() or "none"
+LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS") or 7)
+
 
 def load_watchlist():
     with open(WATCHLIST_PATH, encoding="utf-8") as f:
@@ -41,10 +50,16 @@ def _check_releases(item: dict, state: dict) -> dict:
     previous = state.get(key, {})
 
     result = fetch_releases_since(
-        repo, previous.get("tag"), include_prereleases=item.get("include_prereleases", False)
+        repo,
+        last_tag=None if RESET_MODE != "none" else previous.get("tag"),
+        include_prereleases=item.get("include_prereleases", False),
+        since_days=LOOKBACK_DAYS if RESET_MODE == "lookback" else None,
     )
     state[key] = {"tag": result["latest_tag"]}
 
+    if RESET_MODE == "baseline":
+        return {"has_update": False,
+                "status": f"Baseline set to {result['latest_tag']}; tracking resumes next run."}
     if not result["items"]:
         return {"has_update": False, "status": "No new releases this week."}
 
@@ -65,6 +80,11 @@ def _check_docs(item: dict, state: dict) -> dict:
     state[key] = {"hash": result["hash"]}
     write_snapshot(url, result["content"])
 
+    if RESET_MODE != "none":
+        # A page only exists in its current form; there is no archive to
+        # replay a window against, so a reset can only re-anchor it.
+        return {"has_update": False,
+                "status": "Baseline re-anchored to today's page; changes tracked from next run."}
     if result["is_first_run"]:
         return {"has_update": False, "status": "Baseline captured; changes tracked from next week."}
     if not result["diff"].strip():
@@ -97,12 +117,23 @@ def check(item: dict, state: dict) -> dict:
 
 
 def main():
+    if RESET_MODE == "lookback":
+        print(f"Reset: replaying the last {LOOKBACK_DAYS} days, then re-anchoring state")
+    elif RESET_MODE == "baseline":
+        print("Reset: re-anchoring state to today without reporting")
+
     state = load_state()
     entries = [check(item, state) for item in load_watchlist()]
 
     updated = sum(e["has_update"] for e in entries)
-    subject = f"Repo Watch Digest - {updated} source(s) with updates" if updated \
-        else "Repo Watch Digest - no updates this week"
+    if RESET_MODE == "baseline":
+        subject = "Repo Watch - baseline reset"
+    elif RESET_MODE == "lookback":
+        subject = f"Repo Watch - last {LOOKBACK_DAYS} days ({updated} source(s) with updates)"
+    elif updated:
+        subject = f"Repo Watch Digest - {updated} source(s) with updates"
+    else:
+        subject = "Repo Watch Digest - no updates this week"
 
     send_email(subject, build_digest_html(entries))
     print(f"Email sent. {updated} of {len(entries)} source(s) had updates.")

@@ -35,9 +35,13 @@ def _github_headers() -> dict:
 
 
 def fetch_releases_since(repo: str, last_tag: str | None,
-                         include_prereleases: bool = False) -> dict:
+                         include_prereleases: bool = False,
+                         since_days: int | None = None) -> dict:
     """
     Collect every release published after last_tag, newest first.
+
+    since_days overrides last_tag and takes everything from that many days
+    back instead, which is how a deliberate baseline reset replays a window.
 
     Prereleases are skipped by default: repos like openai/codex cut alpha
     builds several times a day with near-empty notes, which drowns out the
@@ -63,13 +67,16 @@ def fetch_releases_since(repo: str, last_tag: str | None,
     seen_index = next(
         (i for i, r in enumerate(releases) if r["tag_name"] == last_tag), None
     )
-    if seen_index is not None:
+    if since_days is not None:
+        fresh = _within_days(releases, since_days)
+    elif seen_index is not None:
         fresh = releases[:seen_index]
     elif last_tag is None:
         fresh = releases[:1]
     else:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=FALLBACK_LOOKBACK_DAYS)
-        fresh = [r for r in releases if _published(r) > cutoff]
+        # The stored tag aged out of the feed; fall back to a window rather
+        # than replaying the repo's entire release history.
+        fresh = _within_days(releases, FALLBACK_LOOKBACK_DAYS)
 
     items = [
         {
@@ -87,6 +94,11 @@ def fetch_releases_since(repo: str, last_tag: str | None,
         "latest_tag": releases[0]["tag_name"],
         "notes": _bundle_notes(items),
     }
+
+
+def _within_days(releases: list, days: int) -> list:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    return [r for r in releases if _published(r) > cutoff]
 
 
 def _published(release: dict) -> datetime:
