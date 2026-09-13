@@ -1,21 +1,39 @@
 # repo-watch
 
-Weekly digest email of new GitHub releases for a configurable list of repos.
+Weekly digest email covering GitHub releases and documentation pages for a
+configurable list of sources, each summarized against a topic you care about.
 Runs on GitHub Actions (free, no laptop/server needed) every Monday.
 
-## Add a repo to watch
+Currently tracked: the Claude Code and Codex harnesses plus their plugin,
+skills and MCP documentation, summarized for plugin/extension development.
 
-Edit `watchlist.yaml`:
+## Add a source to watch
+
+Edit `watchlist.yaml`. Two kinds of entry:
 
 ```yaml
 watchlist:
-  - name: Spec Kit
-    repo: github/spec-kit
-  - name: Some Other Project
-    repo: owner/other-repo
+  # every release published since last week, prereleases skipped
+  - name: Claude Code
+    group: Claude
+    type: releases
+    repo: anthropics/claude-code
+    focus: plugin manifests, skills, hooks, MCP, breaking changes
+
+  # the page is diffed against last week's snapshot
+  - name: Codex - Plugins
+    group: Codex
+    type: docs
+    url: https://developers.openai.com/codex/plugins.md
+    focus: plugin manifests, skills, hooks, MCP, breaking changes
 ```
 
-Commit and push. Next Monday's run picks it up automatically.
+`focus` is optional. When set, the summary leads with matching changes and
+says plainly when nothing in the update touches that topic. `group` controls
+the headings in the email. Commit and push; the next run picks it up.
+
+Many documentation sites serve a plain-markdown version of a page if you
+append `.md` to the URL - much more stable to diff than rendered HTML.
 
 ## One-time setup
 
@@ -37,16 +55,23 @@ Actions tab -> "Weekly Repo Watch Mailer" -> "Run workflow".
 
 ## How it works
 
-- `main.py` reads `watchlist.yaml`, hits the GitHub releases API for each repo,
-  and compares the latest tag against `state.json` (committed after each run).
-- `synthesize.py` expands new-release changelogs into a short plain-English
+- `main.py` walks `watchlist.yaml` and dispatches each entry to a source type.
+- `sources.py` does the fetching. Release entries collect *every* release since
+  the tag recorded in `state.json`, not just the newest - `anthropics/claude-code`
+  ships ~7 releases a week and `openai/codex` ~18, so "latest only" would lose
+  most of the week. Prereleases are skipped by default because Codex cuts alpha
+  builds several times a day with near-empty notes. Doc entries diff the page
+  against last week's copy in `snapshots/`; only the diff is sent for summary,
+  which keeps the token cost small.
+- `synthesize.py` expands changes into a short plain-English
   summary. It walks the provider list in order (Groq, Cerebras, Google,
   Mistral, OpenRouter) until one answers, so a rate-limited provider just
   moves the call on to the next key. If every provider fails the run errors
   out rather than mailing a digest with raw changelog text in it.
-- `email_service.py` builds one HTML digest covering every watched repo and
-  sends it over Gmail SMTP. Repos with no new release still show up, marked
-  "No updates this week."
+- `email_service.py` builds one grouped HTML digest and sends it over Gmail
+  SMTP. Quiet sources still appear, marked "No updates this week", so silence
+  is visible rather than ambiguous. A source whose fetch failed is shown as
+  "Check failed" instead of being dropped.
 - The cron in `.github/workflows/weekly_mailer.yml` fires every Monday
   9:00 AM IST. GitHub runs this on its own infrastructure, so nothing local
   needs to be on.

@@ -1,6 +1,82 @@
-# One entry per GitHub repo to watch for new releases.
-# name: shown in email section header
-# repo: owner/repo on GitHub
+# Sources checked every Monday.
+#
+# Shared fields:
+#   name   - section heading in the email
+#   group  - optional heading the entry is filed under
+#   focus  - optional topic steer; the summary keeps to this and says so
+#            explicitly when nothing in the update touches it
+#
+# type: releases   requires  repo: owner/name
+#   Every release published since the last seen tag is collected, so
+#   high-cadence repos do not lose the middle of the week. Prereleases are
+#   skipped unless include_prereleases: true - openai/codex cuts alpha builds
+#   several times a day and they bury the stable changelog.
+#
+# type: docs       requires  url: <page>.md
+#   The page is diffed against last week's snapshot in snapshots/.
+
+PLUGIN_FOCUS: &plugin_focus >-
+  plugin and extension development: plugin manifests and marketplaces,
+  skills, hooks, subagents, slash commands, MCP servers and tooling,
+  sandboxing and permissions, and any breaking change affecting plugin
+  authors. Ignore unrelated model, billing, or end-user UI changes.
+
 watchlist:
+  - name: Claude Code
+    group: Claude
+    type: releases
+    repo: anthropics/claude-code
+    focus: *plugin_focus
+
+  - name: Claude Code - Plugins guide
+    group: Claude
+    type: docs
+    url: https://docs.claude.com/en/docs/claude-code/plugins.md
+    focus: *plugin_focus
+
+  - name: Claude Code - Plugin marketplaces
+    group: Claude
+    type: docs
+    url: https://docs.claude.com/en/docs/claude-code/plugin-marketplaces.md
+    focus: *plugin_focus
+
+  - name: Claude Code - Plugins reference
+    group: Claude
+    type: docs
+    url: https://docs.claude.com/en/docs/claude-code/plugins-reference.md
+    focus: *plugin_focus
+
+  - name: Claude Code - Skills
+    group: Claude
+    type: docs
+    url: https://docs.claude.com/en/docs/claude-code/skills.md
+    focus: *plugin_focus
+
+  - name: Codex
+    group: Codex
+    type: releases
+    repo: openai/codex
+    focus: *plugin_focus
+
+  - name: Codex - Plugins
+    group: Codex
+    type: docs
+    url: https://developers.openai.com/codex/plugins.md
+    focus: *plugin_focus
+
+  - name: Codex - Skills
+    group: Codex
+    type: docs
+    url: https://developers.openai.com/codex/skills.md
+    focus: *plugin_focus
+
+  - name: Codex - MCP
+    group: Codex
+    type: docs
+    url: https://developers.openai.com/codex/mcp.md
+    focus: *plugin_focus
+
   - name: Spec Kit
+    group: Other
+    type: releases
     repo: github/spec-kit
