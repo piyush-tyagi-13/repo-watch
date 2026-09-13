@@ -16,10 +16,20 @@
 #   The page is diffed against last week's snapshot in snapshots/.
 
 PLUGIN_FOCUS: &plugin_focus >-
-  plugin and extension development: plugin manifests and marketplaces,
-  skills, hooks, subagents, slash commands, MCP servers and tooling,
-  sandboxing and permissions, and any breaking change affecting plugin
-  authors. Ignore unrelated model, billing, or end-user UI changes.
+  how the harness itself works and how plugins are built for it: the plugin
+  manifest format and loading behaviour, skills, hooks, subagents, slash
+  commands, MCP servers and tooling, sandboxing and permissions, the plugin
+  CLI, and marketplace *mechanics* such as schema, hosting and distribution.
+  Any breaking change for plugin authors is the single most important thing
+  to surface.
+
+  Explicitly out of scope, never report these: news about individual
+  third-party plugins, extensions or skills - which ones were added, updated
+  or removed from any marketplace or bundled set, and what those particular
+  plugins do. The reader builds their own plugins in a private enterprise
+  marketplace and does not care what other people ship. Report the plumbing,
+  never the catalogue. Also ignore unrelated model, billing and end-user UI
+  changes.
 
 watchlist:
   - name: Claude Code
@@ -80,3 +90,7 @@ watchlist:
     group: Other
     type: releases
     repo: github/spec-kit
+    focus: >-
+      the tool's own behaviour, commands, workflow and spec format. Do not
+      report which bundled or community extensions were added or version
+      bumped - the reader wants the tool, not its catalogue.
