@@ -21,13 +21,15 @@ Commit and push. Next Monday's run picks it up automatically.
 
 1. Create a Gmail [app password](https://myaccount.google.com/apppasswords) for the sending account.
 2. Create a GitHub [personal access token](https://github.com/settings/tokens) (fine-grained) with `Contents: Read and write` repository permission (to push `state.json` back and raise the GitHub API rate limit).
-3. Get a free [Groq API key](https://console.groq.com) (used for changelog synthesis - free tier, no card required).
+3. Collect free-tier LLM keys for changelog synthesis. Any one of them is
+   enough to run; more keys just means more fallbacks when one is rate-limited.
 4. Add repo secrets (Settings > Secrets and variables > Actions):
    - `GMAIL_SENDER_EMAIL` - the Gmail address sending the digest
    - `GMAIL_APP_PASSWORD` - the app password from step 1
    - `RECIPIENT_EMAIL` - where the digest should land
    - `GH_PAT` - the token from step 2
-   - `GROQ_API_KEY` - the key from step 3
+   - `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`,
+     `OPENROUTER_API_KEY` - synthesis providers, tried in that order
 
 ## Manual test run
 
@@ -38,8 +40,10 @@ Actions tab -> "Weekly Repo Watch Mailer" -> "Run workflow".
 - `main.py` reads `watchlist.yaml`, hits the GitHub releases API for each repo,
   and compares the latest tag against `state.json` (committed after each run).
 - `synthesize.py` expands new-release changelogs into a short plain-English
-  summary via Groq's free-tier chat completions API (`qwen/qwen3-32b`).
-  Falls back to the raw changelog text if the call fails.
+  summary. It walks the provider list in order (Groq, Cerebras, Google,
+  Mistral, OpenRouter) until one answers, so a rate-limited provider just
+  moves the call on to the next key. If every provider fails the run errors
+  out rather than mailing a digest with raw changelog text in it.
 - `email_service.py` builds one HTML digest covering every watched repo and
   sends it over Gmail SMTP. Repos with no new release still show up, marked
   "No updates this week."
