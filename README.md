@@ -46,8 +46,8 @@ append `.md` to the URL - much more stable to diff than rendered HTML.
    - `GMAIL_APP_PASSWORD` - the app password from step 1
    - `RECIPIENT_EMAIL` - where the digest should land
    - `GH_PAT` - the token from step 2
-   - `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`,
-     `OPENROUTER_API_KEY` - synthesis providers, tried in that order
+   - `GROQ_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `OPENROUTER_API_KEY`
+     - synthesis providers, tried in that order
 
 ## Manual test run
 
@@ -64,8 +64,8 @@ Actions tab -> "Weekly Repo Watch Mailer" -> "Run workflow".
   against last week's copy in `snapshots/`; only the diff is sent for summary,
   which keeps the token cost small.
 - `synthesize.py` expands changes into a short plain-English
-  summary. It walks the provider list in order (Groq, Cerebras, Google,
-  Mistral, OpenRouter) until one answers, so a rate-limited provider just
+  summary. It walks the provider list in order (Groq, Google, Mistral,
+  OpenRouter) until one answers, so a rate-limited provider just
   moves the call on to the next key. If every provider fails the run errors
   out rather than mailing a digest with raw changelog text in it.
 - `email_service.py` builds one grouped HTML digest and sends it over Gmail

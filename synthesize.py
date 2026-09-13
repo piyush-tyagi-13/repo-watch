@@ -11,13 +11,12 @@ import os
 
 import requests
 
-# Cloudflare sits in front of Groq and Cerebras and rejects the default
-# python-requests user agent with error 1010.
+# Cloudflare sits in front of Groq and rejects the default python-requests
+# user agent with error 1010.
 USER_AGENT = "repo-watch/1.0"
 
 PROVIDERS = [
     ("groq", "https://api.groq.com/openai/v1", "qwen/qwen3.8-27b", "GROQ_API_KEY"),
-    ("cerebras", "https://api.cerebras.ai/v1", "qwen-3.8-27b", "CEREBRAS_API_KEY"),
     ("google", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash", "GOOGLE_API_KEY"),
     ("mistral", "https://api.mistral.ai/v1", "ministral-8b-2512", "MISTRAL_API_KEY"),
     ("openrouter", "https://openrouter.ai/api/v1", "nvidia/nemotron-3-super-120b-a12b:free", "OPENROUTER_API_KEY"),
