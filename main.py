@@ -5,16 +5,24 @@ has it summarized, and mails one digest.
 """
 import json
 import os
+from datetime import datetime, timedelta, timezone
 
 import yaml
 
 from email_service import build_digest_html, send_email
 from sources import fetch_doc_changes, fetch_releases_since, write_snapshot
-from synthesize import SynthesisUnavailable, synthesize
+from synthesize import SynthesisUnavailable, headlines, synthesize
 
 STATE_PATH = "state.json"
 WATCHLIST_PATH = "watchlist.yaml"
 DEFAULT_GROUP = "Other"
+
+TITLE = "UAIDLC Plugins | News Flash"
+SUBTITLE = "Claude Code & Codex harness and plugin-surface changes"
+NORMAL_WINDOW_DAYS = 7
+# One source's summary already is the headline; only distil when there is
+# more than one to weigh against each other.
+MIN_SOURCES_FOR_HEADLINES = 2
 
 # Reset modes, set from the workflow_dispatch inputs, decide where "since
 # last time" starts:
@@ -116,6 +124,31 @@ def check(item: dict, state: dict) -> dict:
     }
 
 
+def _period(now: datetime) -> str:
+    if RESET_MODE == "lookback":
+        return f"Last {LOOKBACK_DAYS} days"
+    if RESET_MODE == "baseline":
+        return "Baseline reset"
+    start = now - timedelta(days=NORMAL_WINDOW_DAYS)
+    if start.month == now.month:
+        return f"Week of {start.day}-{now.day} {now:%b %Y}"
+    return f"Week of {start.day} {start:%b} - {now.day} {now:%b %Y}"
+
+
+def _subject(period: str, updated_names: list) -> str:
+    if RESET_MODE == "baseline":
+        return f"{TITLE} | Baseline reset"
+    if not updated_names:
+        return f"{TITLE} | {period} | Quiet week"
+    return f"{TITLE} | {period} | {len(updated_names)} updates: {', '.join(updated_names)}"
+
+
+def _run_url() -> str | None:
+    server, repo, run_id = (os.environ.get(k) for k in
+                            ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"))
+    return f"{server}/{repo}/actions/runs/{run_id}" if server and repo and run_id else None
+
+
 def main():
     if RESET_MODE == "lookback":
         print(f"Reset: replaying the last {LOOKBACK_DAYS} days, then re-anchoring state")
@@ -124,19 +157,28 @@ def main():
 
     state = load_state()
     entries = [check(item, state) for item in load_watchlist()]
+    updated = [e for e in entries if e["has_update"]]
 
-    updated = sum(e["has_update"] for e in entries)
-    if RESET_MODE == "baseline":
-        subject = "Repo Watch - baseline reset"
-    elif RESET_MODE == "lookback":
-        subject = f"Repo Watch - last {LOOKBACK_DAYS} days ({updated} source(s) with updates)"
-    elif updated:
-        subject = f"Repo Watch Digest - {updated} source(s) with updates"
-    else:
-        subject = "Repo Watch Digest - no updates this week"
+    top = None
+    if len(updated) >= MIN_SOURCES_FOR_HEADLINES:
+        print("Distilling headlines")
+        top = headlines([(e["name"], e["summary"]) for e in updated if e.get("summary")])
 
-    send_email(subject, build_digest_html(entries))
-    print(f"Email sent. {updated} of {len(entries)} source(s) had updates.")
+    now = datetime.now(timezone.utc)
+    period = _period(now)
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    meta = {
+        "title": TITLE,
+        "subtitle": SUBTITLE,
+        "period": period,
+        "headlines": top,
+        "generated": f"Generated {now:%d %b %Y %H:%M} UTC",
+        "run_url": _run_url(),
+        "repo_url": f"https://github.com/{repo}/blob/main/watchlist.yaml" if repo else "",
+    }
+
+    send_email(_subject(period, [e["name"] for e in updated]), build_digest_html(entries, meta))
+    print(f"Email sent. {len(updated)} of {len(entries)} source(s) had updates.")
 
     save_state(state)
 

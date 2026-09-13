@@ -1,6 +1,12 @@
 """
 email_service.py
 Builds the HTML digest and sends it over Gmail SMTP.
+
+The mail is forwarded into a Microsoft Teams chat, and Teams discards
+<style> blocks, classes and most inline CSS. So the structure has to carry
+the design on its own: real heading levels, bold, lists, rules and text
+markers. The few inline styles here are polish for Gmail and are safe to
+lose.
 """
 import html
 import os
@@ -11,20 +17,54 @@ from email.mime.text import MIMEText
 
 BULLET_PREFIX = re.compile(r"^\s*(?:[-*•]|\d+\.)\s+")
 BOLD = re.compile(r"\*\*(.+?)\*\*")
+ITALIC = re.compile(r"(?<!\*)\*(?!\*)([^*]+)\*(?!\*)")
+BREAKING = re.compile(r"^\s*(\*\*)?\s*BREAKING:?\s*(\*\*)?\s*:?\s*", re.IGNORECASE)
+RULE_LINE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
+# "Hooks/Subagents:" on its own line is a section label some models emit
+# between bullet runs; it carries nothing once the bullets are a flat list.
+LABEL_LINE = re.compile(r"^\s*(?:\*\*)?[^*\n]{1,40}:(?:\*\*)?\s*$")
+
+# Entities rather than literal glyphs: the mail is re-posted by a forwarding
+# pipeline, and an entity survives any charset misread that would turn a raw
+# UTF-8 triangle into mojibake.
+MARK_UPDATED = "&#9650;"   # black up-pointing triangle
+MARK_QUIET = "&#9675;"     # white circle
+MARK_FAILED = "&#10005;"   # multiplication x
+SEP = " &#183; "           # middle dot
+
+# Statuses that mean "nothing happened"; these collapse into one line per
+# group so the reader is not scrolling past seven identical cards.
+QUIET_STATUSES = {"No new releases this week.", "No documentation changes this week."}
+
+FONT = "font-family:'Segoe UI',Arial,sans-serif;"
+MUTED = "color:#6b7280;"
 
 
 def _inline(text: str) -> str:
-    return BOLD.sub(r"<strong>\1</strong>", html.escape(text))
+    """Escape, then render **bold** and a leading BREAKING: marker."""
+    match = BREAKING.match(text)
+    if match:
+        text = text[match.end():]
+        opened, closed = bool(match.group(1)), bool(match.group(2))
+        # "**BREAKING: Codex:** x" consumed an opener whose closer is still
+        # ahead; "BREAKING: **Codex:** x" consumed the next span's opener.
+        # Either way the span needs reopening.
+        if opened != closed and (closed or text.count("**") % 2 == 1):
+            text = "**" + text
+    rendered = BOLD.sub(r"<b>\1</b>", html.escape(text))
+    rendered = ITALIC.sub(r"\1", rendered)
+    if match:
+        rendered = f"<b>BREAKING:</b> {rendered}"
+    return rendered
 
 
-def _render_summary(summary: str) -> str:
-    """Models answer in markdown; render bullets and bold as real HTML."""
-    bullets = []
-    paragraphs = []
-    for line in summary.splitlines():
-        if not line.strip():
+def _render_markdown(text: str, force_list: bool = False) -> str:
+    """Models answer in light markdown; turn bullets and bold into real HTML."""
+    bullets, paragraphs = [], []
+    for line in text.splitlines():
+        if not line.strip() or RULE_LINE.match(line) or LABEL_LINE.match(line):
             continue
-        if BULLET_PREFIX.match(line):
+        if force_list or BULLET_PREFIX.match(line):
             bullets.append(_inline(BULLET_PREFIX.sub("", line).strip()))
         else:
             paragraphs.append(_inline(line.strip()))
@@ -36,77 +76,87 @@ def _render_summary(summary: str) -> str:
 
 
 def _release_links(releases: list) -> str:
-    links = " ".join(
-        f"<a class='tag' href=\"{r['url']}\">{html.escape(r['tag'])}</a>" for r in releases
+    links = SEP.join(
+        f"<a href=\"{r['url']}\">{html.escape(r['tag'])}</a>" for r in releases
     )
-    return f"<div class='meta'>{links}</div>"
+    return f"<p style=\"{MUTED}\">{links}</p>"
 
 
-def _entry_section(entry: dict) -> str:
+def _updated_entry(entry: dict) -> str:
     name = html.escape(entry["name"])
-    source = entry.get("source_url", "")
+    parts = [
+        f"<h3>{MARK_UPDATED} <a href=\"{entry['source_url']}\">{name}</a>"
+        f" <span style=\"{MUTED}font-weight:normal;\">{html.escape(entry['status'])}</span></h3>"
+    ]
+    if entry.get("releases"):
+        parts.append(_release_links(entry["releases"]))
+    if entry.get("summary"):
+        parts.append(_render_markdown(entry["summary"]))
+    return "".join(parts)
 
-    if entry.get("has_update"):
-        summary_html = _render_summary(entry["summary"]) if entry.get("summary") else ""
-        parts = [f"<div class='status new'>{html.escape(entry['status'])}</div>"]
-        if entry.get("releases"):
-            parts.append(_release_links(entry["releases"]))
-        parts.append(f"<div class='summary'>{summary_html}</div>")
-        body = "".join(parts)
-    else:
-        body = f"<div class='status quiet'>{html.escape(entry.get('status', 'No updates this week.'))}</div>"
 
-    return f"""
-    <div class='repo-block{" updated" if entry.get("has_update") else ""}'>
-      <div class='repo-title'><a href="{source}">{name}</a></div>
-      {body}
-    </div>
-    """
+def _short_name(name: str) -> str:
+    """'Claude Code - Plugins guide' reads as 'Plugins guide' under its group heading."""
+    return name.split(" - ", 1)[1] if " - " in name else name
+
+
+def _quiet_line(entries: list) -> str:
+    names = SEP.join(html.escape(_short_name(e["name"])) for e in entries)
+    return f"<p style=\"{MUTED}\">{MARK_QUIET} No change: {names}</p>"
+
+
+def _note_line(entry: dict) -> str:
+    failed = entry["status"].startswith("Check failed")
+    mark = MARK_FAILED if failed else MARK_QUIET
+    return (f"<p style=\"{MUTED}\">{mark} {html.escape(entry['name'])} - "
+            f"{html.escape(entry['status'])}</p>")
 
 
 def _group_section(group: str, entries: list) -> str:
-    blocks = "".join(_entry_section(e) for e in entries)
-    return f"<div class='group'><div class='group-title'>{html.escape(group)}</div>{blocks}</div>"
+    updated = [e for e in entries if e.get("has_update")]
+    quiet = [e for e in entries if not e.get("has_update") and e["status"] in QUIET_STATUSES]
+    noted = [e for e in entries if not e.get("has_update") and e["status"] not in QUIET_STATUSES]
+
+    parts = [f"<h2>{html.escape(group)}</h2>"]
+    parts += [_updated_entry(e) for e in updated]
+    if quiet:
+        parts.append(_quiet_line(quiet))
+    parts += [_note_line(e) for e in noted]
+    return "".join(parts)
 
 
-def build_digest_html(entries: list) -> str:
+def build_digest_html(entries: list, meta: dict) -> str:
     grouped = {}
     for entry in entries:
         grouped.setdefault(entry.get("group", "Other"), []).append(entry)
-    sections = "".join(_group_section(g, items) for g, items in grouped.items())
-    return f"""
-    <html>
-    <head>
-    <style>
-      body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f4f8fb; color: #222; margin: 0; }}
-      .container {{ background: #fff; max-width: 640px; margin: 40px auto; padding: 32px 28px; border-radius: 16px; box-shadow: 0 4px 24px #dbeafe; }}
-      h2 {{ color: #2563eb; font-size: 1.6rem; margin-bottom: 1em; }}
-      .group {{ margin-bottom: 2em; }}
-      .group-title {{ font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2563eb; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.4em; margin-bottom: 0.9em; }}
-      .repo-block {{ margin-bottom: 1em; padding: 1em; border-radius: 10px; background: #f8fafc; border-left: 3px solid #e2e8f0; }}
-      .repo-block.updated {{ background: #f1f5f9; border-left-color: #16a34a; }}
-      .repo-title {{ font-size: 1.05rem; font-weight: 600; color: #0f172a; }}
-      .repo-title a {{ color: #0f172a; text-decoration: none; }}
-      .status {{ margin-top: 0.4em; color: #334155; }}
-      .status.new {{ color: #16a34a; font-weight: 600; }}
-      .status.quiet {{ color: #94a3b8; font-size: 0.92rem; }}
-      .meta {{ font-size: 0.85rem; color: #64748b; margin-top: 0.4em; }}
-      .tag {{ display: inline-block; background: #e2e8f0; color: #475569; border-radius: 5px; padding: 1px 6px; margin: 0 3px 3px 0; font-size: 0.78rem; text-decoration: none; }}
-      .summary {{ margin-top: 0.6em; font-size: 0.95rem; line-height: 1.55; color: #1e293b; }}
-      .summary p {{ margin: 0 0 0.6em 0; }}
-      .summary ul {{ margin: 0.2em 0 0 0; padding-left: 1.2em; }}
-      .summary li {{ margin-bottom: 0.45em; }}
-      .summary strong {{ color: #0f172a; }}
-    </style>
-    </head>
-    <body>
-      <div class="container">
-        <h2>Repo Watch Digest</h2>
-        {sections}
-      </div>
-    </body>
-    </html>
-    """
+
+    updated_names = [e["name"] for e in entries if e.get("has_update")]
+    quiet_count = len(entries) - len(updated_names)
+    if updated_names:
+        pulse = f"<b>{len(updated_names)} source(s) moved</b>, {quiet_count} quiet"
+    else:
+        pulse = f"<b>Quiet week</b> - nothing moved across {len(entries)} sources"
+
+    head = [
+        f"<h1 style=\"color:#1d4ed8;\">{html.escape(meta['title'])}</h1>",
+        f"<p><b>{html.escape(meta['period'])}</b>{SEP}{html.escape(meta['subtitle'])}</p>",
+        f"<p>{pulse}</p>",
+        "<hr>",
+    ]
+    if meta.get("headlines"):
+        head += ["<h2>Headlines</h2>", _render_markdown(meta["headlines"], force_list=True), "<hr>"]
+
+    body = "".join(_group_section(g, items) for g, items in grouped.items())
+
+    foot = ["<hr>", f"<p style=\"{MUTED}font-size:12px;\">"]
+    if meta.get("run_url"):
+        foot.append(f"<a href=\"{meta['run_url']}\">Run log</a>{SEP}")
+    foot.append(f"{html.escape(meta['generated'])}{SEP}"
+                f"<a href=\"{meta['repo_url']}\">watchlist</a></p>")
+
+    return ("<html><head><meta charset=\"utf-8\"></head>"
+            f"<body style=\"{FONT}color:#111827;line-height:1.5;\">"
+            + "".join(head) + body + "".join(foot) + "</body></html>")
 
 
 def send_email(subject: str, html_body: str):
