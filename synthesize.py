@@ -8,7 +8,7 @@ import os
 import requests
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "qwen/qwen3-32b"
+MODEL = "qwen/qwen3.8-27b"
 
 SYSTEM_PROMPT = (
     "You summarize software release notes for a busy engineer. "
