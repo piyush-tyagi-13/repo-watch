@@ -1,15 +1,14 @@
 """
 synthesize.py
 Expands a raw GitHub release body into a short plain-English summary
-using GitHub Models' free inference API (no separate API key needed
-beyond the same GH_PAT used for the GitHub REST calls).
+using Groq's free-tier chat completions API.
 """
 import os
 
 import requests
 
-GITHUB_MODELS_URL = "https://models.github.ai/inference/chat/completions"
-MODEL = "openai/gpt-4o-mini"
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL = "qwen/qwen3-32b"
 
 SYSTEM_PROMPT = (
     "You summarize software release notes for a busy engineer. "
@@ -22,8 +21,8 @@ SYSTEM_PROMPT = (
 
 def synthesize_changelog(repo_name: str, release_name: str, raw_body: str) -> str:
     """Returns an HTML-safe plain-text summary, or the raw body if synthesis fails."""
-    token = os.environ.get("GH_PAT")
-    if not token or not raw_body.strip():
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key or not raw_body.strip():
         return raw_body
 
     payload = {
@@ -34,10 +33,10 @@ def synthesize_changelog(repo_name: str, release_name: str, raw_body: str) -> st
         ],
         "temperature": 0.2,
     }
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     try:
-        resp = requests.post(GITHUB_MODELS_URL, headers=headers, json=payload, timeout=30)
+        resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as exc:  # network/quota/parsing issues fall back to raw text
