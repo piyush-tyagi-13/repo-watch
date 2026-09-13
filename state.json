@@ -21,12 +21,12 @@
     "hash": "8552fefb7d225fcdc1c4098f6a33616d6a55e63206b9d84f0522c7411d0c4c41"
   },
   "releases:anthropics/claude-code": {
-    "tag": "v2.1.270"
+    "tag": "v2.1.263"
   },
   "releases:github/spec-kit": {
-    "tag": "v1.0.6"
+    "tag": "v1.0.4"
   },
   "releases:openai/codex": {
-    "tag": "python-v0.154.0"
+    "tag": "rust-v0.153.4"
   }
 }
