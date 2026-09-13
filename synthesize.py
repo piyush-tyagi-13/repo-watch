@@ -8,8 +8,8 @@ import os
 
 import requests
 
-GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions"
-MODEL = "gpt-4o-mini"
+GITHUB_MODELS_URL = "https://models.github.ai/inference/chat/completions"
+MODEL = "openai/gpt-4o-mini"
 
 SYSTEM_PROMPT = (
     "You summarize software release notes for a busy engineer. "
