@@ -1,3 +1,33 @@
 {
-  "github/spec-kit": "v1.0.6"
+  "docs:https://developers.openai.com/codex/mcp.md": {
+    "hash": "978cad2319d28ce8e888e890cb6bd5c5a0631d3dc0b463fc66928ba419982f1a"
+  },
+  "docs:https://developers.openai.com/codex/plugins.md": {
+    "hash": "edfc5dfe4e2fbd6b0d00ab30bda96241f6ca81f9a96141c2a340ec46e962446a"
+  },
+  "docs:https://developers.openai.com/codex/skills.md": {
+    "hash": "d15791562748e64a53dfec534b8558aa522e732cec0fdedcf7257fa4ef486a20"
+  },
+  "docs:https://docs.claude.com/en/docs/claude-code/plugin-marketplaces.md": {
+    "hash": "a3e583bb947febc3c586b49138af534d3915ba29e1bbbb5d66b95b1d1a4fa39c"
+  },
+  "docs:https://docs.claude.com/en/docs/claude-code/plugins-reference.md": {
+    "hash": "f2bcba18c364204670b56c44f72fad0e416bb5648bf564b1824cc63dd9800fb3"
+  },
+  "docs:https://docs.claude.com/en/docs/claude-code/plugins.md": {
+    "hash": "6f9f15a184ff8008208afd690e12488c45941d16844c2fc7b3f455ce0825daca"
+  },
+  "docs:https://docs.claude.com/en/docs/claude-code/skills.md": {
+    "hash": "8552fefb7d225fcdc1c4098f6a33616d6a55e63206b9d84f0522c7411d0c4c41"
+  },
+  "github/spec-kit": "v1.0.6",
+  "releases:anthropics/claude-code": {
+    "tag": "v2.1.270"
+  },
+  "releases:github/spec-kit": {
+    "tag": "v1.0.6"
+  },
+  "releases:openai/codex": {
+    "tag": "python-v0.154.0"
+  }
 }
