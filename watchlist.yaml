@@ -1,0 +1,6 @@
+# One entry per GitHub repo to watch for new releases.
+# name: shown in email section header
+# repo: owner/repo on GitHub
+watchlist:
+  - name: Spec Kit
+    repo: github/spec-kit
