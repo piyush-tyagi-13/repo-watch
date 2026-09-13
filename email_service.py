@@ -100,28 +100,36 @@ def _short_name(name: str) -> str:
     return name.split(" - ", 1)[1] if " - " in name else name
 
 
-def _quiet_line(entries: list) -> str:
-    names = SEP.join(html.escape(_short_name(e["name"])) for e in entries)
-    return f"<p style=\"{MUTED}\">{MARK_QUIET} No change: {names}</p>"
-
-
-def _note_line(entry: dict) -> str:
-    failed = entry["status"].startswith("Check failed")
-    mark = MARK_FAILED if failed else MARK_QUIET
-    return (f"<p style=\"{MUTED}\">{mark} {html.escape(entry['name'])} - "
+def _failure_line(entry: dict) -> str:
+    return (f"<p style=\"{MUTED}\">{MARK_FAILED} {html.escape(entry['name'])} - "
             f"{html.escape(entry['status'])}</p>")
 
 
-def _group_section(group: str, entries: list) -> str:
-    updated = [e for e in entries if e.get("has_update")]
-    quiet = [e for e in entries if not e.get("has_update") and e["status"] in QUIET_STATUSES]
-    noted = [e for e in entries if not e.get("has_update") and e["status"] not in QUIET_STATUSES]
+def _note_lines(entries: list) -> list:
+    """Reset-run notes share their wording, so say it once per group."""
+    by_status = {}
+    for e in entries:
+        by_status.setdefault(e["status"], []).append(_short_name(e["name"]))
+    return [
+        f"<p style=\"{MUTED}\">{MARK_QUIET} {html.escape(status)} "
+        f"({SEP.join(html.escape(n) for n in names)})</p>"
+        for status, names in by_status.items()
+    ]
 
+
+def _group_section(group: str, entries: list) -> str:
+    """A heading only exists when something under it needs reading."""
+    updated = [e for e in entries if e.get("has_update")]
+    rest = [e for e in entries if not e.get("has_update") and e["status"] not in QUIET_STATUSES]
+    failed = [e for e in rest if e["status"].startswith("Check failed")]
+    noted = [e for e in rest if e not in failed]
+
+    if not updated and not rest:
+        return ""
     parts = [f"<h2>{html.escape(group)}</h2>"]
     parts += [_updated_entry(e) for e in updated]
-    if quiet:
-        parts.append(_quiet_line(quiet))
-    parts += [_note_line(e) for e in noted]
+    parts += [_failure_line(e) for e in failed]
+    parts += _note_lines(noted)
     return "".join(parts)
 
 
@@ -131,11 +139,14 @@ def build_digest_html(entries: list, meta: dict) -> str:
         grouped.setdefault(entry.get("group", "Other"), []).append(entry)
 
     updated_names = [e["name"] for e in entries if e.get("has_update")]
-    quiet_count = len(entries) - len(updated_names)
+    failed_count = sum(e["status"].startswith("Check failed") for e in entries if not e.get("has_update"))
+    quiet_count = len(entries) - len(updated_names) - failed_count
     if updated_names:
         pulse = f"<b>{len(updated_names)} source(s) moved</b>, {quiet_count} quiet"
     else:
         pulse = f"<b>Quiet week</b> - nothing moved across {len(entries)} sources"
+    if failed_count:
+        pulse += f", <b>{failed_count} check(s) failed</b>"
 
     head = [
         f"<h1 style=\"color:#1d4ed8;\">{html.escape(meta['title'])}</h1>",

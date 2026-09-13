@@ -91,9 +91,14 @@ than all of them, delete its entry from `state.json` - and its file from
   moves the call on to the next key. If every provider fails the run errors
   out rather than mailing a digest with raw changelog text in it.
 - `email_service.py` builds one grouped HTML digest and sends it over Gmail
-  SMTP. Quiet sources still appear, marked "No updates this week", so silence
-  is visible rather than ambiguous. A source whose fetch failed is shown as
-  "Check failed" instead of being dropped.
+  SMTP. A heading only exists when something under it needs reading: quiet
+  sources are not listed (the pulse line under the title carries the quiet
+  count, and an all-quiet week says so in the subject and body), a group
+  heading appears only if something in it moved or failed, and a source
+  whose fetch failed is always shown as "Check failed" rather than dropped.
+  The mail is forwarded into a Teams chat, which strips stylesheets and
+  classes, so the layout is structural HTML only - headings, bold, lists,
+  rules - with markers as HTML entities.
 - The cron in `.github/workflows/weekly_mailer.yml` fires every Monday
   9:00 AM IST. GitHub runs this on its own infrastructure, so nothing local
   needs to be on.
