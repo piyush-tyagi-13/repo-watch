@@ -24,7 +24,9 @@ SERVER_ERROR_BACKOFF_SECONDS = 5
 PROVIDERS = [
     ("google", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3.8-flash", "GOOGLE_API_KEY"),
     ("groq", "https://api.groq.com/openai/v1", "qwen/qwen3.8-27b", "GROQ_API_KEY"),
-    ("mistral", "https://api.mistral.ai/v1", "mistral-medium-latest", "MISTRAL_API_KEY"),
+    # mistral-medium is listed for this key but every call returns 429 on the
+    # free tier; ministral-14b is the strongest model that actually answers.
+    ("mistral", "https://api.mistral.ai/v1", "ministral-14b-latest", "MISTRAL_API_KEY"),
     ("openrouter", "https://openrouter.ai/api/v1", "nvidia/nemotron-3-super-120b-a12b:free", "OPENROUTER_API_KEY"),
 ]
 
