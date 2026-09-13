@@ -20,7 +20,6 @@
   "docs:https://docs.claude.com/en/docs/claude-code/skills.md": {
     "hash": "8552fefb7d225fcdc1c4098f6a33616d6a55e63206b9d84f0522c7411d0c4c41"
   },
-  "github/spec-kit": "v1.0.6",
   "releases:anthropics/claude-code": {
     "tag": "v2.1.270"
   },

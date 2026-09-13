@@ -35,21 +35,10 @@ def save_state(state):
         f.write("\n")
 
 
-def _previous(state: dict, key: str, legacy_key: str) -> dict:
-    """State used to be {repo: tag}; read either shape."""
-    entry = state.get(key)
-    if isinstance(entry, dict):
-        return entry
-    legacy = state.get(legacy_key)
-    if isinstance(legacy, str):
-        return {"tag": legacy}
-    return {}
-
-
 def _check_releases(item: dict, state: dict) -> dict:
     repo = item["repo"]
     key = f"releases:{repo}"
-    previous = _previous(state, key, repo)
+    previous = state.get(key, {})
 
     result = fetch_releases_since(
         repo, previous.get("tag"), include_prereleases=item.get("include_prereleases", False)
