@@ -201,6 +201,7 @@ def main():
         "period": period,
         "headlines": top,
         "generated": f"Generated {now:%d %b %Y %H:%M} UTC",
+        "repo": os.environ.get("GITHUB_REPOSITORY", "piyush-tyagi-13/repo-watch"),
     }
 
     send_email(_subject(period, [e["name"] for e in updated]), build_digest_html(entries, meta))

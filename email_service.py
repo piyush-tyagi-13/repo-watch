@@ -147,7 +147,14 @@ def build_digest_html(entries: list, meta: dict) -> str:
 
     body = "".join(_group_section(g, items) for g, items in grouped.items())
 
-    foot = ["<hr>", f"<p style=\"{MUTED}font-size:12px;\">{html.escape(meta['generated'])}</p>"]
+    # Plain text on purpose - the repo path is there to be read and typed,
+    # not clicked; see the no-hyperlinks note at the top of this file.
+    foot = [
+        "<hr>",
+        f"<p style=\"{MUTED}font-size:12px;\">"
+        f"Powered by <b>repo-watch</b>{SEP}github.com/{html.escape(meta['repo'])}<br>"
+        f"{html.escape(meta['generated'])}</p>",
+    ]
 
     return ("<html><head><meta charset=\"utf-8\"></head>"
             f"<body style=\"{FONT}color:#111827;line-height:1.5;\">"

@@ -134,3 +134,7 @@ skipped day costs nothing - the gate is checked before any network call, so
 the job exits in seconds. A dropped or failed Monday run therefore delays
 the report by a day, never a week. `workflow_dispatch` (manual runs) and any
 `reset_mode` always bypass the gate.
+
+## License
+
+MIT - see [LICENSE](LICENSE).
