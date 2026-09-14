@@ -11,7 +11,7 @@ import yaml
 
 from email_service import build_digest_html, send_email
 from sources import fetch_doc_changes, fetch_releases_since, write_snapshot
-from synthesize import SynthesisUnavailable, headlines, synthesize
+from synthesize import headlines, synthesize
 
 STATE_PATH = "state.json"
 WATCHLIST_PATH = "watchlist.yaml"
@@ -27,12 +27,13 @@ MIN_SOURCES_FOR_HEADLINES = 2
 # GitHub's scheduler can silently drop a repo's very first cron occurrence -
 # it left no run record at all, not even a failed or skipped one, when this
 # repo's own Monday-only cron missed on day one. A weekly trigger has no
-# room to recover from that; a daily one does. The workflow's cron now
-# fires every day (the same cadence a sibling project has run without a
-# single miss); this gate is what keeps the actual report weekly - it
-# fires once 7+ days have passed since the last one, so a missed day just
-# shifts the next report by a day instead of costing a whole week.
-REPORT_INTERVAL_DAYS = 7
+# room to recover from that; a daily one does. The workflow's cron fires
+# every day (the same cadence a sibling project has run without a single
+# miss); this gate is what keeps the actual report weekly. It reports on
+# Monday, and if Monday's run was dropped or failed, the next day that
+# notices no report has gone out this week catches up - so a miss costs a
+# day, not a week, and a failed run simply retries tomorrow.
+REPORT_WEEKDAY = 0  # Monday
 # A manual run (workflow_dispatch) always reports regardless of the gate;
 # only the schedule trigger is gated.
 IS_SCHEDULED_RUN = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
@@ -120,32 +121,31 @@ def check(item: dict, state: dict) -> dict:
     handler = {"releases": _check_releases, "docs": _check_docs}[kind]
 
     print(f"Checking {item['name']} ({kind})")
-    try:
-        outcome = handler(item, state)
-    except SynthesisUnavailable:
-        raise  # never mail a digest with the summary silently missing
-    except Exception as exc:
-        print(f"  check failed: {exc}")
-        outcome = {"has_update": False, "status": f"Check failed: {exc}"}
+    # No catch-all: the digest is forwarded into a team chat, and a "check
+    # failed" line there reads as a broken report. A failure aborts the run
+    # with no mail; the daily cron retries tomorrow, state untouched.
+    outcome = handler(item, state)
 
     return {
         "name": item["name"],
         "group": item.get("group", DEFAULT_GROUP),
         "kind": kind,
-        "source_url": item.get("url") or f"https://github.com/{item.get('repo', '')}",
         **outcome,
     }
 
 
+def _week_start(day) -> "date":
+    return day - timedelta(days=(day.weekday() - REPORT_WEEKDAY) % 7)
+
+
 def _due_for_report(state: dict, now: datetime) -> bool:
-    """Gate the schedule trigger to a weekly cadence a daily cron can recover from."""
+    """Once a week, on Monday; any later day catches up if this week's report is missing."""
     if not IS_SCHEDULED_RUN or RESET_MODE != "none":
         return True
     last = state.get("last_report")
     if not last:
         return True
-    elapsed = (now.date() - datetime.fromisoformat(last).date()).days
-    return elapsed >= REPORT_INTERVAL_DAYS
+    return datetime.fromisoformat(last).date() < _week_start(now.date())
 
 
 def _period(now: datetime, window_days: int) -> str:
@@ -167,20 +167,14 @@ def _subject(period: str, updated_names: list) -> str:
     return f"{TITLE} | {period} | {len(updated_names)} updates: {', '.join(updated_names)}"
 
 
-def _run_url() -> str | None:
-    server, repo, run_id = (os.environ.get(k) for k in
-                            ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"))
-    return f"{server}/{repo}/actions/runs/{run_id}" if server and repo and run_id else None
-
-
 def main():
     now = datetime.now(timezone.utc)
     state = load_state()
 
     if not _due_for_report(state, now):
-        last = state["last_report"]
-        due_in = REPORT_INTERVAL_DAYS - (now.date() - datetime.fromisoformat(last).date()).days
-        print(f"Daily check: last report was {last}, next one due in {due_in} day(s). Skipping.")
+        next_monday = _week_start(now.date()) + timedelta(days=7)
+        print(f"Daily check: this week's report went out {state['last_report']}; "
+              f"next one {next_monday}. Skipping.")
         return
 
     if RESET_MODE == "lookback":
@@ -201,15 +195,12 @@ def main():
         top = headlines([(e["name"], e["summary"]) for e in updated if e.get("summary")])
 
     period = _period(now, window_days)
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
     meta = {
         "title": TITLE,
         "subtitle": SUBTITLE,
         "period": period,
         "headlines": top,
         "generated": f"Generated {now:%d %b %Y %H:%M} UTC",
-        "run_url": _run_url(),
-        "repo_url": f"https://github.com/{repo}/blob/main/watchlist.yaml" if repo else "",
     }
 
     send_email(_subject(period, [e["name"] for e in updated]), build_digest_html(entries, meta))

@@ -49,7 +49,8 @@ append `.md` to the URL - much more stable to diff than rendered HTML.
 4. Add repo secrets (Settings > Secrets and variables > Actions):
    - `GMAIL_SENDER_EMAIL` - the Gmail address sending the digest
    - `GMAIL_APP_PASSWORD` - the app password from step 1
-   - `RECIPIENT_EMAIL` - where the digest should land
+   - `RECIPIENT_EMAIL` - where the digest should land; comma-separated for
+     more than one address
    - `GH_PAT` - the token from step 2
    - `GROQ_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `OPENROUTER_API_KEY`
      - synthesis providers, tried in that order
@@ -98,15 +99,20 @@ than all of them, delete its entry from `state.json` - and its file from
 - `email_service.py` builds one grouped HTML digest and sends it over Gmail
   SMTP. A heading only exists when something under it needs reading: quiet
   sources are not listed (the pulse line under the title carries the quiet
-  count, and an all-quiet week says so in the subject and body), a group
-  heading appears only if something in it moved or failed, and a source
-  whose fetch failed is always shown as "Check failed" rather than dropped.
-  The mail is forwarded into a Teams chat, which strips stylesheets and
-  classes, so the layout is structural HTML only - headings, bold, lists,
-  rules - with markers as HTML entities.
+  count, and an all-quiet week says so in the subject and body) and a group
+  heading appears only if something in it moved. There are no hyperlinks
+  anywhere in the mail - it is read inside a corporate network where
+  outbound links do not resolve. The mail is forwarded into a Teams chat,
+  which strips stylesheets and classes, so the layout is structural HTML
+  only - headings, bold, lists, rules - with markers as HTML entities.
+- A fetch that fails is retried with backoff (`sources.py`, 4 attempts).
+  If it still fails, the run aborts and nothing is mailed - a "check
+  failed" line in a digest that lands in a team chat reads as a broken
+  report. Because the cron is daily, the failed run simply retries the
+  next day with state untouched.
 - The cron in `.github/workflows/weekly_mailer.yml` fires daily at
-  9:00 AM IST. GitHub runs this on its own infrastructure, so nothing local
-  needs to be on.
+  4:00 PM IST (10:30 UTC); the report itself goes out on Mondays. GitHub
+  runs this on its own infrastructure, so nothing local needs to be on.
 
 ## Why daily cron, weekly report
 
@@ -121,10 +127,10 @@ indexing it. A weekly cron has no room to recover from that - miss the one
 occurrence and the report is late by a week, not a day.
 
 So the cron fires daily, and `main.py` decides whether to actually run:
-`_due_for_report()` checks `state["last_report"]` and only proceeds once
-`REPORT_INTERVAL_DAYS` (7) have passed. A skipped day costs nothing - the
-gate is checked before any network call, so the job exits in seconds. If a
-day is ever missed again, the next day's check just notices more time has
-elapsed and catches up, so the report drifts by at most a day instead of a
-week. `workflow_dispatch` (manual runs) and any `reset_mode` always bypass
-the gate.
+`_due_for_report()` reports on Monday (`REPORT_WEEKDAY`), and on any later
+day of the week it checks whether `state["last_report"]` is older than this
+week's Monday - if so, this week's report is missing and it catches up. A
+skipped day costs nothing - the gate is checked before any network call, so
+the job exits in seconds. A dropped or failed Monday run therefore delays
+the report by a day, never a week. `workflow_dispatch` (manual runs) and any
+`reset_mode` always bypass the gate.

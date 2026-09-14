@@ -29,8 +29,10 @@ LABEL_LINE = re.compile(r"^\s*(?:\*\*)?[^*\n]{1,40}:(?:\*\*)?\s*$")
 # UTF-8 triangle into mojibake.
 MARK_UPDATED = "&#9650;"   # black up-pointing triangle
 MARK_QUIET = "&#9675;"     # white circle
-MARK_FAILED = "&#10005;"   # multiplication x
 SEP = " &#183; "           # middle dot
+
+# No hyperlinks anywhere in the digest: it is read inside a corporate
+# network where outbound links do not resolve, so a link is just clutter.
 
 # Statuses that mean "nothing happened"; these collapse into one line per
 # group so the reader is not scrolling past seven identical cards.
@@ -75,21 +77,18 @@ def _render_markdown(text: str, force_list: bool = False) -> str:
     return "".join(parts)
 
 
-def _release_links(releases: list) -> str:
-    links = SEP.join(
-        f"<a href=\"{r['url']}\">{html.escape(r['tag'])}</a>" for r in releases
-    )
-    return f"<p style=\"{MUTED}\">{links}</p>"
+def _release_tags(releases: list) -> str:
+    tags = SEP.join(html.escape(r["tag"]) for r in releases)
+    return f"<p style=\"{MUTED}\">{tags}</p>"
 
 
 def _updated_entry(entry: dict) -> str:
-    name = html.escape(entry["name"])
     parts = [
-        f"<h3>{MARK_UPDATED} <a href=\"{entry['source_url']}\">{name}</a>"
+        f"<h3>{MARK_UPDATED} {html.escape(entry['name'])}"
         f" <span style=\"{MUTED}font-weight:normal;\">{html.escape(entry['status'])}</span></h3>"
     ]
     if entry.get("releases"):
-        parts.append(_release_links(entry["releases"]))
+        parts.append(_release_tags(entry["releases"]))
     if entry.get("summary"):
         parts.append(_render_markdown(entry["summary"]))
     return "".join(parts)
@@ -98,11 +97,6 @@ def _updated_entry(entry: dict) -> str:
 def _short_name(name: str) -> str:
     """'Claude Code - Plugins guide' reads as 'Plugins guide' under its group heading."""
     return name.split(" - ", 1)[1] if " - " in name else name
-
-
-def _failure_line(entry: dict) -> str:
-    return (f"<p style=\"{MUTED}\">{MARK_FAILED} {html.escape(entry['name'])} - "
-            f"{html.escape(entry['status'])}</p>")
 
 
 def _note_lines(entries: list) -> list:
@@ -120,15 +114,12 @@ def _note_lines(entries: list) -> list:
 def _group_section(group: str, entries: list) -> str:
     """A heading only exists when something under it needs reading."""
     updated = [e for e in entries if e.get("has_update")]
-    rest = [e for e in entries if not e.get("has_update") and e["status"] not in QUIET_STATUSES]
-    failed = [e for e in rest if e["status"].startswith("Check failed")]
-    noted = [e for e in rest if e not in failed]
+    noted = [e for e in entries if not e.get("has_update") and e["status"] not in QUIET_STATUSES]
 
-    if not updated and not rest:
+    if not updated and not noted:
         return ""
     parts = [f"<h2>{html.escape(group)}</h2>"]
     parts += [_updated_entry(e) for e in updated]
-    parts += [_failure_line(e) for e in failed]
     parts += _note_lines(noted)
     return "".join(parts)
 
@@ -139,14 +130,11 @@ def build_digest_html(entries: list, meta: dict) -> str:
         grouped.setdefault(entry.get("group", "Other"), []).append(entry)
 
     updated_names = [e["name"] for e in entries if e.get("has_update")]
-    failed_count = sum(e["status"].startswith("Check failed") for e in entries if not e.get("has_update"))
-    quiet_count = len(entries) - len(updated_names) - failed_count
+    quiet_count = len(entries) - len(updated_names)
     if updated_names:
         pulse = f"<b>{len(updated_names)} source(s) moved</b>, {quiet_count} quiet"
     else:
         pulse = f"<b>Quiet week</b> - nothing moved across {len(entries)} sources"
-    if failed_count:
-        pulse += f", <b>{failed_count} check(s) failed</b>"
 
     head = [
         f"<h1 style=\"color:#1d4ed8;\">{html.escape(meta['title'])}</h1>",
@@ -159,11 +147,7 @@ def build_digest_html(entries: list, meta: dict) -> str:
 
     body = "".join(_group_section(g, items) for g, items in grouped.items())
 
-    foot = ["<hr>", f"<p style=\"{MUTED}font-size:12px;\">"]
-    if meta.get("run_url"):
-        foot.append(f"<a href=\"{meta['run_url']}\">Run log</a>{SEP}")
-    foot.append(f"{html.escape(meta['generated'])}{SEP}"
-                f"<a href=\"{meta['repo_url']}\">watchlist</a></p>")
+    foot = ["<hr>", f"<p style=\"{MUTED}font-size:12px;\">{html.escape(meta['generated'])}</p>"]
 
     return ("<html><head><meta charset=\"utf-8\"></head>"
             f"<body style=\"{FONT}color:#111827;line-height:1.5;\">"
@@ -173,14 +157,14 @@ def build_digest_html(entries: list, meta: dict) -> str:
 def send_email(subject: str, html_body: str):
     sender = os.environ["GMAIL_SENDER_EMAIL"]
     password = os.environ["GMAIL_APP_PASSWORD"]
-    recipient = os.environ["RECIPIENT_EMAIL"]
+    recipients = [r.strip() for r in os.environ["RECIPIENT_EMAIL"].split(",") if r.strip()]
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = sender
-    msg["To"] = recipient
+    msg["To"] = ", ".join(recipients)
     msg.attach(MIMEText(html_body, "html"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(sender, password)
-        server.sendmail(sender, [recipient], msg.as_string())
+        server.sendmail(sender, recipients, msg.as_string())

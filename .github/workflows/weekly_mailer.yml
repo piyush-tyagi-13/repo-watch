@@ -1,15 +1,15 @@
 name: Weekly Repo Watch Mailer
 
 # Fires daily; main.py's report gate is what actually keeps the mail weekly
-# (see REPORT_INTERVAL_DAYS in main.py). A once-a-week cron has no room to
-# recover if GitHub's scheduler drops its one occurrence for the week - which
-# happened here: this repo's very first Monday-only cron fired zero times,
-# with no run record at all, while a sibling project's daily cron on this
-# same account has never missed a day. Firing daily and gating in code is
-# proven reliable; firing weekly and hoping is not.
+# (Mondays - see REPORT_WEEKDAY in main.py). A once-a-week cron has no room
+# to recover if GitHub's scheduler drops its one occurrence for the week -
+# which happened here: this repo's very first Monday-only cron fired zero
+# times, with no run record at all, while a sibling project's daily cron on
+# this same account has never missed a day. Firing daily and gating in code
+# is proven reliable; firing weekly and hoping is not.
 on:
   schedule:
-    - cron: '30 3 * * *'  # daily at 9:00 AM IST (3:30 UTC); see note above
+    - cron: '30 10 * * *'  # daily at 4:00 PM IST (10:30 UTC); see note above
   workflow_dispatch:
     inputs:
       reset_mode:

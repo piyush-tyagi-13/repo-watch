@@ -9,6 +9,7 @@ import difflib
 import hashlib
 import os
 import re
+import time
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -24,6 +25,32 @@ FALLBACK_LOOKBACK_DAYS = 14
 # context window of the smaller free-tier models.
 MAX_DIFF_LINES = 400
 MAX_BUNDLE_CHARS = 24000
+
+
+# GitHub's API and the docs sites occasionally drop a response mid-body
+# (IncompleteRead) or return a 5xx; one such blip put a "check failed" line
+# into a digest that was then forwarded to a team chat. A few retries with
+# growing backoff absorb that. 4xx is not retried - it is not transient.
+FETCH_ATTEMPTS = 4
+FETCH_BACKOFF_SECONDS = 5
+
+
+def _get(url: str, **kwargs) -> requests.Response:
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            resp = requests.get(url, **kwargs)
+            if resp.status_code < 500 or attempt == FETCH_ATTEMPTS:
+                resp.raise_for_status()
+                return resp
+            reason = f"HTTP {resp.status_code}"
+        except (requests.ConnectionError, requests.Timeout,
+                requests.exceptions.ChunkedEncodingError) as exc:
+            if attempt == FETCH_ATTEMPTS:
+                raise
+            reason = str(exc)
+        wait = FETCH_BACKOFF_SECONDS * attempt
+        print(f"  fetch attempt {attempt} failed ({reason}); retrying in {wait}s")
+        time.sleep(wait)
 
 
 def _github_headers() -> dict:
@@ -49,13 +76,12 @@ def fetch_releases_since(repo: str, last_tag: str | None,
 
     Returns {"items": [...], "latest_tag": str | None, "notes": str}.
     """
-    resp = requests.get(
+    resp = _get(
         f"{GITHUB_API}/repos/{repo}/releases",
         headers=_github_headers(),
         params={"per_page": 100},
         timeout=30,
     )
-    resp.raise_for_status()
     releases = [
         r for r in resp.json()
         if not r.get("draft") and (include_prereleases or not r.get("prerelease"))
@@ -132,8 +158,7 @@ def fetch_doc_changes(url: str) -> dict:
     The caller is responsible for writing content to snapshot_path(url) once
     it has successfully handled the change.
     """
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=45)
-    resp.raise_for_status()
+    resp = _get(url, headers={"User-Agent": USER_AGENT}, timeout=45)
     content = resp.text
 
     path = snapshot_path(url)
