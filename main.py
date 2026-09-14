@@ -18,7 +18,7 @@ WATCHLIST_PATH = "watchlist.yaml"
 DEFAULT_GROUP = "Other"
 
 TITLE = "UAIDLC Plugins | News Flash"
-SUBTITLE = "Claude Code & Codex harness and plugin-surface changes"
+SUBTITLE = "Claude Code, Codex & Spec Kit - harness and plugin-surface changes"
 NORMAL_WINDOW_DAYS = 7
 # One source's summary already is the headline; only distil when there is
 # more than one to weigh against each other.

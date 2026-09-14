@@ -9,8 +9,9 @@ actually due (see "Why daily cron, weekly report" below). Do not "fix" the
 cron back to once a week - that is what caused a missed report in the first
 place.
 
-Currently tracked: the Claude Code and Codex harnesses plus their plugin,
-skills and MCP documentation, summarized for plugin/extension development.
+Currently tracked, with equal priority: the Claude Code and Codex harnesses
+plus their plugin, skills and MCP documentation, and Spec Kit - all
+summarized for plugin/extension development.
 
 ## Add a source to watch
 
