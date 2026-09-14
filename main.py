@@ -36,7 +36,13 @@ MIN_SOURCES_FOR_HEADLINES = 2
 REPORT_WEEKDAY = 0  # Monday
 # A manual run (workflow_dispatch) always reports regardless of the gate;
 # only the schedule trigger is gated.
-IS_SCHEDULED_RUN = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+IS_GATED_RUN = (os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+                or os.environ.get("GATED", "").strip().lower() == "true")
+# On Monday the report waits for this UTC time so it lands around 4 PM IST.
+# The trigger repo's cron fires several times through the day (GitHub's
+# scheduler on this account runs 4-5 hours behind), and the gate makes the
+# early ones skip. Catch-up days after Monday have no time floor.
+REPORT_EARLIEST_UTC = (9, 30)
 
 # Reset modes, set from the workflow_dispatch inputs, decide where "since
 # last time" starts:
@@ -138,14 +144,20 @@ def _week_start(day) -> "date":
     return day - timedelta(days=(day.weekday() - REPORT_WEEKDAY) % 7)
 
 
-def _due_for_report(state: dict, now: datetime) -> bool:
-    """Once a week, on Monday; any later day catches up if this week's report is missing."""
-    if not IS_SCHEDULED_RUN or RESET_MODE != "none":
-        return True
+def _reported_this_week(state: dict, now: datetime) -> bool:
     last = state.get("last_report")
-    if not last:
+    return bool(last) and datetime.fromisoformat(last).date() >= _week_start(now.date())
+
+
+def _due_for_report(state: dict, now: datetime) -> bool:
+    """Once a week, on Monday from REPORT_EARLIEST_UTC; later days catch up if missing."""
+    if not IS_GATED_RUN or RESET_MODE != "none":
         return True
-    return datetime.fromisoformat(last).date() < _week_start(now.date())
+    if _reported_this_week(state, now):
+        return False
+    if now.weekday() == REPORT_WEEKDAY and (now.hour, now.minute) < REPORT_EARLIEST_UTC:
+        return False
+    return True
 
 
 def _period(now: datetime, window_days: int) -> str:
@@ -172,9 +184,13 @@ def main():
     state = load_state()
 
     if not _due_for_report(state, now):
-        next_monday = _week_start(now.date()) + timedelta(days=7)
-        print(f"Daily check: this week's report went out {state['last_report']}; "
-              f"next one {next_monday}. Skipping.")
+        if _reported_this_week(state, now):
+            print(f"Gated run: this week's report went out {state['last_report']}; "
+                  f"next one {_week_start(now.date()) + timedelta(days=7)}. Skipping.")
+        else:
+            print(f"Gated run: Monday report waits until "
+                  f"{REPORT_EARLIEST_UTC[0]:02d}:{REPORT_EARLIEST_UTC[1]:02d} UTC; "
+                  f"now {now:%H:%M} UTC. Skipping.")
         return
 
     if RESET_MODE == "lookback":

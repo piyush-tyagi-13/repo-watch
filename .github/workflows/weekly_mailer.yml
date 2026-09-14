@@ -31,6 +31,11 @@ on:
         type: string
         required: false
         default: '7'
+      gated:
+        description: 'Respect the weekly gate (the trigger workflow sets this; leave false for a manual run)'
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   mailer:
@@ -63,6 +68,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           RESET_MODE: ${{ inputs.reset_mode || 'none' }}
           LOOKBACK_DAYS: ${{ inputs.lookback_days || '7' }}
+          GATED: ${{ inputs.gated || 'false' }}
         run: |
           python main.py
 
