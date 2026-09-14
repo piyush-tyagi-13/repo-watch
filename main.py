@@ -24,9 +24,22 @@ NORMAL_WINDOW_DAYS = 7
 # more than one to weigh against each other.
 MIN_SOURCES_FOR_HEADLINES = 2
 
+# GitHub's scheduler can silently drop a repo's very first cron occurrence -
+# it left no run record at all, not even a failed or skipped one, when this
+# repo's own Monday-only cron missed on day one. A weekly trigger has no
+# room to recover from that; a daily one does. The workflow's cron now
+# fires every day (the same cadence a sibling project has run without a
+# single miss); this gate is what keeps the actual report weekly - it
+# fires once 7+ days have passed since the last one, so a missed day just
+# shifts the next report by a day instead of costing a whole week.
+REPORT_INTERVAL_DAYS = 7
+# A manual run (workflow_dispatch) always reports regardless of the gate;
+# only the schedule trigger is gated.
+IS_SCHEDULED_RUN = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+
 # Reset modes, set from the workflow_dispatch inputs, decide where "since
 # last time" starts:
-#   none      - normal weekly run, compare against recorded state
+#   none      - normal run, compare against recorded state
 #   lookback  - ignore recorded state, report the last LOOKBACK_DAYS, then
 #               record today as the canonical starting point
 #   baseline  - record today as the starting point without reporting anything
@@ -124,12 +137,23 @@ def check(item: dict, state: dict) -> dict:
     }
 
 
-def _period(now: datetime) -> str:
+def _due_for_report(state: dict, now: datetime) -> bool:
+    """Gate the schedule trigger to a weekly cadence a daily cron can recover from."""
+    if not IS_SCHEDULED_RUN or RESET_MODE != "none":
+        return True
+    last = state.get("last_report")
+    if not last:
+        return True
+    elapsed = (now.date() - datetime.fromisoformat(last).date()).days
+    return elapsed >= REPORT_INTERVAL_DAYS
+
+
+def _period(now: datetime, window_days: int) -> str:
     if RESET_MODE == "lookback":
         return f"Last {LOOKBACK_DAYS} days"
     if RESET_MODE == "baseline":
         return "Baseline reset"
-    start = now - timedelta(days=NORMAL_WINDOW_DAYS)
+    start = now - timedelta(days=window_days)
     if start.month == now.month:
         return f"Week of {start.day}-{now.day} {now:%b %Y}"
     return f"Week of {start.day} {start:%b} - {now.day} {now:%b %Y}"
@@ -150,12 +174,24 @@ def _run_url() -> str | None:
 
 
 def main():
+    now = datetime.now(timezone.utc)
+    state = load_state()
+
+    if not _due_for_report(state, now):
+        last = state["last_report"]
+        due_in = REPORT_INTERVAL_DAYS - (now.date() - datetime.fromisoformat(last).date()).days
+        print(f"Daily check: last report was {last}, next one due in {due_in} day(s). Skipping.")
+        return
+
     if RESET_MODE == "lookback":
         print(f"Reset: replaying the last {LOOKBACK_DAYS} days, then re-anchoring state")
     elif RESET_MODE == "baseline":
         print("Reset: re-anchoring state to today without reporting")
 
-    state = load_state()
+    window_days = NORMAL_WINDOW_DAYS
+    if RESET_MODE == "none" and state.get("last_report"):
+        window_days = max(1, (now.date() - datetime.fromisoformat(state["last_report"]).date()).days)
+
     entries = [check(item, state) for item in load_watchlist()]
     updated = [e for e in entries if e["has_update"]]
 
@@ -164,8 +200,7 @@ def main():
         print("Distilling headlines")
         top = headlines([(e["name"], e["summary"]) for e in updated if e.get("summary")])
 
-    now = datetime.now(timezone.utc)
-    period = _period(now)
+    period = _period(now, window_days)
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     meta = {
         "title": TITLE,
@@ -180,6 +215,8 @@ def main():
     send_email(_subject(period, [e["name"] for e in updated]), build_digest_html(entries, meta))
     print(f"Email sent. {len(updated)} of {len(entries)} source(s) had updates.")
 
+    if RESET_MODE != "baseline":
+        state["last_report"] = now.date().isoformat()
     save_state(state)
 
 

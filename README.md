@@ -2,7 +2,12 @@
 
 Weekly digest email covering GitHub releases and documentation pages for a
 configurable list of sources, each summarized against a topic you care about.
-Runs on GitHub Actions (free, no laptop/server needed) every Monday.
+Runs on GitHub Actions (free, no laptop/server needed).
+
+The workflow's cron fires **daily**; the code decides whether a report is
+actually due (see "Why daily cron, weekly report" below). Do not "fix" the
+cron back to once a week - that is what caused a missed report in the first
+place.
 
 Currently tracked: the Claude Code and Codex harnesses plus their plugin,
 skills and MCP documentation, summarized for plugin/extension development.
@@ -99,6 +104,27 @@ than all of them, delete its entry from `state.json` - and its file from
   The mail is forwarded into a Teams chat, which strips stylesheets and
   classes, so the layout is structural HTML only - headings, bold, lists,
   rules - with markers as HTML entities.
-- The cron in `.github/workflows/weekly_mailer.yml` fires every Monday
+- The cron in `.github/workflows/weekly_mailer.yml` fires daily at
   9:00 AM IST. GitHub runs this on its own infrastructure, so nothing local
   needs to be on.
+
+## Why daily cron, weekly report
+
+The very first Monday-only cron this repo ever scheduled did not fire.
+GitHub's Actions API showed zero runs with `event: schedule` - not a failed
+run, not a skipped one, nothing at all - for that occurrence. Everything else
+about the repo checked out (public, not a fork, not archived, Actions enabled,
+same settings as a sibling project whose daily cron has never missed), which
+points at a known GitHub Actions gap: a brand-new repository's very first
+scheduled trigger can be silently dropped while the scheduler finishes
+indexing it. A weekly cron has no room to recover from that - miss the one
+occurrence and the report is late by a week, not a day.
+
+So the cron fires daily, and `main.py` decides whether to actually run:
+`_due_for_report()` checks `state["last_report"]` and only proceeds once
+`REPORT_INTERVAL_DAYS` (7) have passed. A skipped day costs nothing - the
+gate is checked before any network call, so the job exits in seconds. If a
+day is ever missed again, the next day's check just notices more time has
+elapsed and catches up, so the report drifts by at most a day instead of a
+week. `workflow_dispatch` (manual runs) and any `reset_mode` always bypass
+the gate.
