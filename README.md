@@ -4,10 +4,10 @@ Weekly digest email covering GitHub releases and documentation pages for a
 configurable list of sources, each summarized against a topic you care about.
 Runs on GitHub Actions (free, no laptop/server needed).
 
-The workflow's cron fires **daily**; the code decides whether a report is
-actually due (see "Why daily cron, weekly report" below). Do not "fix" the
-cron back to once a week - that is what caused a missed report in the first
-place.
+This repo is **dispatched by a sibling repo's cron**, not by its own - its
+own schedule trigger has never fired. The code decides whether a report is
+actually due. See "How it gets triggered" below before changing anything
+about scheduling.
 
 Currently tracked, with equal priority: the Claude Code and Codex harnesses
 plus their plugin, skills and MCP documentation, and Spec Kit - all
@@ -111,30 +111,42 @@ than all of them, delete its entry from `state.json` - and its file from
   failed" line in a digest that lands in a team chat reads as a broken
   report. Because the cron is daily, the failed run simply retries the
   next day with state untouched.
-- The cron in `.github/workflows/weekly_mailer.yml` fires daily at
-  4:00 PM IST (10:30 UTC); the report itself goes out on Mondays. GitHub
-  runs this on its own infrastructure, so nothing local needs to be on.
+- The run is triggered by dispatch from `piyush-tyagi-13/meal-planner`
+  (see "How it gets triggered"); the report goes out on Mondays around
+  4 PM IST. Everything runs on GitHub's infrastructure - nothing local
+  needs to be on.
 
-## Why daily cron, weekly report
+## How it gets triggered (read this before touching the schedule)
 
-The very first Monday-only cron this repo ever scheduled did not fire.
-GitHub's Actions API showed zero runs with `event: schedule` - not a failed
-run, not a skipped one, nothing at all - for that occurrence. Everything else
-about the repo checked out (public, not a fork, not archived, Actions enabled,
-same settings as a sibling project whose daily cron has never missed), which
-points at a known GitHub Actions gap: a brand-new repository's very first
-scheduled trigger can be silently dropped while the scheduler finishes
-indexing it. A weekly cron has no room to recover from that - miss the one
-occurrence and the report is late by a week, not a day.
+**This repo's own `schedule` trigger has never fired.** Across every cron
+occurrence since the repo was created, GitHub's Actions API shows zero runs
+with `event: schedule` - not failed, not skipped, none - while a sibling
+repo on the same account (`piyush-tyagi-13/meal-planner`) runs its daily
+cron without a miss. The cron entries in `weekly_mailer.yml` are kept, but
+nothing depends on them.
 
-So the cron fires daily, and `main.py` decides whether to actually run:
-`_due_for_report()` reports on Monday (`REPORT_WEEKDAY`), and on any later
-day of the week it checks whether `state["last_report"]` is older than this
-week's Monday - if so, this week's report is missing and it catches up. A
-skipped day costs nothing - the gate is checked before any network call, so
-the job exits in seconds. A dropped or failed Monday run therefore delays
-the report by a day, never a week. `workflow_dispatch` (manual runs) and any
-`reset_mode` always bypass the gate.
+Delivery is by **dispatch from that sibling repo** instead:
+`meal-planner/.github/workflows/trigger_repo_watch.yml` fires at 02:50,
+05:30 and 09:00 UTC and runs `gh workflow run weekly_mailer.yml -f gated=true`
+against this repo. GitHub's scheduler on this account runs 4-5 hours behind
+its cron times, consistently, so the 05:30 entry lands around 10:00-10:50
+UTC - which is the 4 PM IST target.
+
+`main.py` then decides whether to actually report (`_due_for_report`):
+
+- A dispatch with `gated=true` (or a real `schedule` event) reports on
+  **Monday**, only once it is past `REPORT_EARLIEST_UTC` (09:30), and never
+  again that week. So the ~07:30 dispatch skips, the ~10:00 one sends, the
+  ~14:00 one skips.
+- If Monday produced no report (every dispatch failed or was dropped), the
+  first dispatch on any later day of that week catches up, with no time
+  floor. A bad Monday costs a day, never a week.
+- A manual "Run workflow" by a person (gated left false) always reports.
+
+The gate runs before any network call, so a skipped dispatch costs seconds.
+The trigger authenticates with `secrets.REPO_WATCH_TOKEN` if set in
+meal-planner, else that repo's `GH_PAT`; either needs `Actions: write` on
+this repo.
 
 ## License
 
