@@ -10,6 +10,11 @@ name: Weekly Repo Watch Mailer
 on:
   schedule:
     - cron: '30 10 * * *'  # daily at 4:00 PM IST (10:30 UTC); see note above
+    # Monday backups. If GitHub drops the 10:30 occurrence, the report still
+    # goes out within the hour. The gate in main.py makes these idempotent:
+    # once a report is recorded for the week, later triggers exit in seconds.
+    - cron: '50 10 * * 1'
+    - cron: '15 11 * * 1'
   workflow_dispatch:
     inputs:
       reset_mode:

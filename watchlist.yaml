@@ -87,7 +87,7 @@ watchlist:
     focus: *plugin_focus
 
   - name: Spec Kit
-    group: Other
+    group: Spec Kit
     type: releases
     repo: github/spec-kit
     focus: >-
