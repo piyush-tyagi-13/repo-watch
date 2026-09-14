@@ -9,7 +9,7 @@ name: Weekly Repo Watch Mailer
 # is proven reliable; firing weekly and hoping is not.
 on:
   schedule:
-    - cron: '30 10 * * *'  # daily at 4:00 PM IST (10:30 UTC); see note above
+    - cron: '25 10 * * *'  # daily, 3:55 PM IST (10:25 UTC); off the :30 slot GitHub's scheduler is slowest on
     # Monday backups. If GitHub drops the 10:30 occurrence, the report still
     # goes out within the hour. The gate in main.py makes these idempotent:
     # once a report is recorded for the week, later triggers exit in seconds.
