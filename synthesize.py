@@ -17,8 +17,19 @@ import requests
 USER_AGENT = "repo-watch/1.0"
 # Gemini's free tier returns 503 in sustained spells, not just single
 # blips; three tries with growing backoff rides out the short ones.
-SERVER_ERROR_ATTEMPTS = 3
-SERVER_ERROR_BACKOFF_SECONDS = 8
+SERVER_ERROR_ATTEMPTS = 2
+SERVER_ERROR_BACKOFF_SECONDS = 6
+# (connect, read). Gemini's free tier hangs rather than refusing when it is
+# overloaded; a long read timeout turns that into dead waiting.
+REQUEST_TIMEOUT = (10, 60)
+# A provider that is down tends to stay down for the length of a run. Once
+# one has burned its retries this many times, stop calling it: a digest makes
+# ~10 synthesis calls, and without this a single provider in a 503 spell adds
+# minutes to every one of them (the 2026-10-26 run took over 20 minutes for
+# exactly that reason).
+PROVIDER_STRIKES = 2
+_dead_providers: dict[str, str] = {}
+_strikes: dict[str, int] = {}
 
 # Gemini leads: it is the strongest model in the chain and its free tier
 # takes the largest release bundles, where Groq's 8k tokens/min limit
@@ -126,7 +137,7 @@ def _call(base_url: str, model: str, api_key: str, system_prompt: str, user_cont
         "User-Agent": USER_AGENT,
     }
     for attempt in range(SERVER_ERROR_ATTEMPTS):
-        resp = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=90)
+        resp = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
         # 5xx is transient overload (Gemini's free tier returns 503 under load);
         # one short retry usually lands before falling through to the next provider.
         if resp.status_code >= 500 and attempt < SERVER_ERROR_ATTEMPTS - 1:
@@ -153,6 +164,9 @@ def _complete(system_prompt: str, user_content: str) -> str:
         if not api_key:
             failures.append(f"{name}: no {env_var} configured")
             continue
+        if name in _dead_providers:
+            failures.append(f"{name}: skipped, {_dead_providers[name]} earlier this run")
+            continue
         try:
             text = _call(base_url, model, api_key, system_prompt, user_content)
             problem = _looks_sane(text)
@@ -167,6 +181,10 @@ def _complete(system_prompt: str, user_content: str) -> str:
         except Exception as exc:
             print(f"Provider {name} failed: {exc}")
             failures.append(f"{name}: {exc}")
+            _strikes[name] = _strikes.get(name, 0) + 1
+            if _strikes[name] >= PROVIDER_STRIKES:
+                _dead_providers[name] = str(exc)[:60]
+                print(f"  benching {name} for the rest of this run")
 
     if fallbacks:
         name, model, text = fallbacks[0]
