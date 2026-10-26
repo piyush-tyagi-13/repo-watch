@@ -15,8 +15,10 @@ import requests
 # Cloudflare sits in front of Groq and rejects the default python-requests
 # user agent with error 1010.
 USER_AGENT = "repo-watch/1.0"
-SERVER_ERROR_ATTEMPTS = 2
-SERVER_ERROR_BACKOFF_SECONDS = 5
+# Gemini's free tier returns 503 in sustained spells, not just single
+# blips; three tries with growing backoff rides out the short ones.
+SERVER_ERROR_ATTEMPTS = 3
+SERVER_ERROR_BACKOFF_SECONDS = 8
 
 # Gemini leads: it is the strongest model in the chain and its free tier
 # takes the largest release bundles, where Groq's 8k tokens/min limit
@@ -27,7 +29,12 @@ PROVIDERS = [
     # mistral-medium is listed for this key but every call returns 429 on the
     # free tier; ministral-14b is the strongest model that actually answers.
     ("mistral", "https://api.mistral.ai/v1", "ministral-14b-latest", "MISTRAL_API_KEY"),
-    ("openrouter", "https://openrouter.ai/api/v1", "nvidia/nemotron-3-super-120b-a12b:free", "OPENROUTER_API_KEY"),
+    # OpenRouter retires :free slugs without notice - nemotron-3-super-120b
+    # started 404ing some time before 2026-10-26 and took the chain's last
+    # rung with it. Two entries here so one dead slug is not fatal; verify
+    # both against /api/v1/models if this ever 404s again.
+    ("openrouter", "https://openrouter.ai/api/v1", "nvidia/nemotron-3-ultra-550b-a55b:free", "OPENROUTER_API_KEY"),
+    ("openrouter-alt", "https://openrouter.ai/api/v1", "nvidia/nemotron-3.5-lightning:free", "OPENROUTER_API_KEY"),
 ]
 
 BASE_PROMPT = (
@@ -123,15 +130,24 @@ def _call(base_url: str, model: str, api_key: str, system_prompt: str, user_cont
         # 5xx is transient overload (Gemini's free tier returns 503 under load);
         # one short retry usually lands before falling through to the next provider.
         if resp.status_code >= 500 and attempt < SERVER_ERROR_ATTEMPTS - 1:
-            time.sleep(SERVER_ERROR_BACKOFF_SECONDS)
+            time.sleep(SERVER_ERROR_BACKOFF_SECONDS * (attempt + 1))
             continue
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
 
 
 def _complete(system_prompt: str, user_content: str) -> str:
-    """Run one completion through the provider chain. Raises if none answers."""
+    """
+    Run one completion through the provider chain.
+
+    A provider whose output ignores the brief is passed over, but its text is
+    kept: if no provider produces a clean summary, the best of those is used
+    rather than failing the run. A verbose summary is still a summary - the
+    rule is never to mail raw changelog text, and this is not that. Raises
+    only when nothing anywhere returned usable content.
+    """
     failures = []
+    fallbacks = []
     for name, base_url, model, env_var in PROVIDERS:
         api_key = os.environ.get(env_var)
         if not api_key:
@@ -143,12 +159,19 @@ def _complete(system_prompt: str, user_content: str) -> str:
             if problem:
                 print(f"Provider {name} ignored the brief ({problem}), trying next")
                 failures.append(f"{name}: {problem}")
+                if text.strip():
+                    fallbacks.append((name, model, text))
                 continue
             print(f"  synthesized via {name} ({model})")
             return text
         except Exception as exc:
             print(f"Provider {name} failed: {exc}")
             failures.append(f"{name}: {exc}")
+
+    if fallbacks:
+        name, model, text = fallbacks[0]
+        print(f"  no clean summary; using {name} ({model}) despite the brief")
+        return text
 
     raise SynthesisUnavailable(
         "All synthesis providers failed:\n  " + "\n  ".join(failures)
