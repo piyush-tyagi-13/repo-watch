@@ -11,7 +11,7 @@ import yaml
 
 from email_service import build_digest_html, send_email
 from sources import fetch_doc_changes, fetch_releases_since, write_snapshot
-from synthesize import headlines, synthesize
+from synthesize import SynthesisUnavailable, headlines, synthesize
 
 STATE_PATH = "state.json"
 WATCHLIST_PATH = "watchlist.yaml"
@@ -127,10 +127,20 @@ def check(item: dict, state: dict) -> dict:
     handler = {"releases": _check_releases, "docs": _check_docs}[kind]
 
     print(f"Checking {item['name']} ({kind})")
-    # No catch-all: the digest is forwarded into a team chat, and a "check
-    # failed" line there reads as a broken report. A failure aborts the run
-    # with no mail; the daily cron retries tomorrow, state untouched.
-    outcome = handler(item, state)
+    # A source that cannot be fetched is dropped from this digest rather
+    # than killing it. On 2026-11-02 the GitHub API returned 504 for one
+    # repo and the whole Monday mail was lost. Its state is deliberately
+    # left untouched, so the next successful run reports everything since
+    # the last tag it did record - delayed, never dropped. Nothing about
+    # the skip appears in the mail: a "check failed" line reads as a broken
+    # report in the team chat it is forwarded to.
+    try:
+        outcome = handler(item, state)
+    except SynthesisUnavailable:
+        raise  # every model down is a real outage, not one flaky source
+    except Exception as exc:
+        print(f"  SKIPPED {item['name']}: {exc}")
+        return None
 
     return {
         "name": item["name"],
@@ -202,7 +212,13 @@ def main():
     if RESET_MODE == "none" and state.get("last_report"):
         window_days = max(1, (now.date() - datetime.fromisoformat(state["last_report"]).date()).days)
 
-    entries = [check(item, state) for item in load_watchlist()]
+    watchlist = load_watchlist()
+    entries = [e for e in (check(item, state) for item in watchlist) if e]
+    if not entries:
+        raise RuntimeError("every source failed to fetch; mailing nothing")
+    skipped = len(watchlist) - len(entries)
+    if skipped:
+        print(f"{skipped} source(s) skipped this run; they report next time.")
     updated = [e for e in entries if e["has_update"]]
 
     top = None

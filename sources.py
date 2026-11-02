@@ -31,8 +31,8 @@ MAX_BUNDLE_CHARS = 24000
 # (IncompleteRead) or return a 5xx; one such blip put a "check failed" line
 # into a digest that was then forwarded to a team chat. A few retries with
 # growing backoff absorb that. 4xx is not retried - it is not transient.
-FETCH_ATTEMPTS = 4
-FETCH_BACKOFF_SECONDS = 5
+FETCH_ATTEMPTS = 5
+FETCH_BACKOFF_SECONDS = 6
 
 
 def _get(url: str, **kwargs) -> requests.Response:
@@ -79,7 +79,10 @@ def fetch_releases_since(repo: str, last_tag: str | None,
     resp = _get(
         f"{GITHUB_API}/repos/{repo}/releases",
         headers=_github_headers(),
-        params={"per_page": 100},
+        # 100 releases with full bodies is a heavy response; api.github.com
+        # returned 504 for openai/codex at that size. 60 still spans well over
+        # a week even for the busiest repo here.
+        params={"per_page": 60},
         timeout=30,
     )
     releases = [
