@@ -1,33 +1,33 @@
 {
   "docs:https://developers.openai.com/codex/mcp.md": {
-    "hash": "624b9a507e1a3dfea1c02b30edb9a00addcf2a8e60b8005ab8dd9749642a406f"
+    "hash": "b49326fc03c8848502abece987cb9f5f9fd153ef1369c8d27fb861911f752adf"
   },
   "docs:https://developers.openai.com/codex/plugins.md": {
     "hash": "e63d475f7ef48c63145f86889fb2c12db024edeafea876446bc333a0660e63b8"
   },
   "docs:https://developers.openai.com/codex/skills.md": {
-    "hash": "ed6e324f747d47adf6f60ee1fca13ba469b3671f55f58c3a78f35947af6919d5"
+    "hash": "95b5ef4d0581d9eeeee342ef4718e77ed7574fe9c61ae28e1c2bffa4c6bdb411"
   },
   "docs:https://docs.claude.com/en/docs/claude-code/plugin-marketplaces.md": {
     "hash": "09ca4f45324f12bfae726823b14c7b3c5bdd8f31261afe74c93691d2d21b4e1c"
   },
   "docs:https://docs.claude.com/en/docs/claude-code/plugins-reference.md": {
-    "hash": "a10a371d18d571e769f99720d4402f3ec13ceb668561266f57145cfa940fa4ed"
+    "hash": "b0f8e2f9c1e5c05b3fd975f15a6c85fb9bae15cc81b07b90137b065af09b7fce"
   },
   "docs:https://docs.claude.com/en/docs/claude-code/plugins.md": {
     "hash": "9124d73faba1ae251d9f4229d03e19bd9fc0cd811a43aefc014c75a9d34e64ad"
   },
   "docs:https://docs.claude.com/en/docs/claude-code/skills.md": {
-    "hash": "d2a5d07c0d1cef1d1edcf30f38f6b2712ff70ac050e3d50601cd3dadb42f9097"
+    "hash": "977bb9f8d6a004c37e6731afd94bc3ad7bba1e64a2b2d7e7f22df910d4b06287"
   },
-  "last_report": "2026-11-02",
+  "last_report": "2026-11-09",
   "releases:anthropics/claude-code": {
-    "tag": "v2.1.316"
+    "tag": "v2.1.319"
   },
   "releases:github/spec-kit": {
-    "tag": "v1.2.5"
+    "tag": "v1.3.2"
   },
   "releases:openai/codex": {
-    "tag": "rust-v0.166.0"
+    "tag": "rust-v0.167.0"
   }
 }
