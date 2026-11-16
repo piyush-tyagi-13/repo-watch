@@ -12,22 +12,22 @@
     "hash": "09ca4f45324f12bfae726823b14c7b3c5bdd8f31261afe74c93691d2d21b4e1c"
   },
   "docs:https://docs.claude.com/en/docs/claude-code/plugins-reference.md": {
-    "hash": "b0f8e2f9c1e5c05b3fd975f15a6c85fb9bae15cc81b07b90137b065af09b7fce"
+    "hash": "f5d88a52b3bf6ef52b249dc230df025d4915701459a6947375e87740ffc75ffc"
   },
   "docs:https://docs.claude.com/en/docs/claude-code/plugins.md": {
-    "hash": "9124d73faba1ae251d9f4229d03e19bd9fc0cd811a43aefc014c75a9d34e64ad"
+    "hash": "e5b255a52965b71be9d9583bb9b6707f65ce1f214f6afa4f614e1a492787e599"
   },
   "docs:https://docs.claude.com/en/docs/claude-code/skills.md": {
-    "hash": "977bb9f8d6a004c37e6731afd94bc3ad7bba1e64a2b2d7e7f22df910d4b06287"
+    "hash": "654fd3e23932c9a0e0f79f382a348a231ed8add3944c7ef3e3cec543589a6060"
   },
-  "last_report": "2026-11-09",
+  "last_report": "2026-11-16",
   "releases:anthropics/claude-code": {
-    "tag": "v2.1.319"
+    "tag": "v2.1.325"
   },
   "releases:github/spec-kit": {
-    "tag": "v1.3.2"
+    "tag": "v1.4.0"
   },
   "releases:openai/codex": {
-    "tag": "rust-v0.167.0"
+    "tag": "rust-v0.169.0"
   }
 }
